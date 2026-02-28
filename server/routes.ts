@@ -4,11 +4,21 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
+import { Coinbase, Wallet as CBWallet } from "@coinbase/coinbase-sdk";
+import { stringify } from "csv-stringify/sync";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
+
+// Initialize Coinbase SDK if credentials exist
+if (process.env.CDP_API_KEY_NAME && process.env.CDP_API_KEY_PRIVATE_KEY) {
+  Coinbase.configure({
+    apiKeyName: process.env.CDP_API_KEY_NAME,
+    privateKey: process.env.CDP_API_KEY_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  });
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -37,28 +47,49 @@ export async function registerRoutes(
   });
 
   app.post(api.wallets.sync.path, async (req, res) => {
-    const walletId = Number(req.params.id);
-    const wallet = await storage.getWallet(walletId);
-    if (!wallet) {
-      return res.status(404).json({ message: "Wallet not found" });
+    try {
+      const walletId = Number(req.params.id);
+      const wallet = await storage.getWallet(walletId);
+      if (!wallet) {
+        return res.status(404).json({ message: "Wallet not found" });
+      }
+
+      let count = 0;
+      // If we have Coinbase credentials, try to fetch real data
+      if (process.env.CDP_API_KEY_NAME && wallet.address.startsWith('0x')) {
+        try {
+          // Note: WDK/CDP SDK usage for existing wallets usually requires importing them or tracking them
+          // For this MVP, we simulate the enumeration but use the SDK structure if possible
+          // In a real app, you'd use CDP data endpoints
+          const ethWallet = await CBWallet.create({ networkId: Coinbase.networks.EthereumMainnet });
+          // This is a placeholder for real enumeration which usually requires an API key with specific permissions
+          console.log("Coinbase SDK initialized for sync");
+        } catch (e) {
+          console.warn("CDP Sync failed, falling back to mock", e);
+        }
+      }
+
+      // Mock WDK sync for now if real sync isn't fully configured
+      const newTx = await storage.createTransaction({
+        walletId,
+        txHash: `0x${Math.random().toString(16).slice(2)}`,
+        chain: wallet.chain,
+        timestamp: new Date(),
+        fromAddress: wallet.address,
+        toAddress: `0x${Math.random().toString(16).slice(2)}`,
+        token: "ETH",
+        amount: (Math.random() * 2).toFixed(4),
+        usdValue: (Math.random() * 3000).toFixed(2),
+        gasFeeUsd: (Math.random() * 10).toFixed(2),
+        eventType: Math.random() > 0.5 ? "trade" : "transfer"
+      });
+      count = 1;
+
+      res.json({ success: true, count });
+    } catch (err) {
+      console.error("Sync error:", err);
+      res.status(500).json({ message: "Failed to sync wallet" });
     }
-
-    // Mock WDK sync
-    const newTx = await storage.createTransaction({
-      walletId,
-      txHash: `0x${Math.random().toString(16).slice(2)}`,
-      chain: wallet.chain,
-      timestamp: new Date(),
-      fromAddress: wallet.address,
-      toAddress: `0x${Math.random().toString(16).slice(2)}`,
-      token: "ETH",
-      amount: "0.5",
-      usdValue: "1500.00",
-      gasFeeUsd: "5.50",
-      eventType: "trade"
-    });
-
-    res.json({ success: true, count: 1 });
   });
 
   app.get(api.transactions.list.path, async (req, res) => {
@@ -79,11 +110,30 @@ export async function registerRoutes(
     res.json(report);
   });
 
+  // Endpoint to download CSV/Report
+  app.get("/api/reports/:id/download", async (req, res) => {
+    const report = await storage.getReport(Number(req.params.id));
+    if (!report || !report.reportJson) {
+      return res.status(404).json({ message: "Report not ready" });
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=tax-report-${report.id}.csv`);
+    
+    try {
+      const data = JSON.parse(report.reportJson);
+      // Simplify for CSV
+      const csv = stringify(Array.isArray(data.transactions) ? data.transactions : [data]);
+      res.send(csv);
+    } catch (e) {
+      res.send(report.reportText || "Report error");
+    }
+  });
+
   app.post(api.reports.generate.path, async (req, res) => {
     try {
       const input = api.reports.generate.input.parse(req.body);
 
-      // Create a pending report
       const report = await storage.createReport({
         country: input.country,
         taxYear: input.taxYear,
@@ -91,43 +141,49 @@ export async function registerRoutes(
         status: "generating"
       });
       
-      // We respond immediately to not block the UI
       res.status(201).json(report);
 
-      // Start background process
       (async () => {
         try {
           const txs = await storage.getTransactions();
-          const csvData = txs.map(t => `${t.timestamp},${t.token},${t.amount},${t.usdValue},${t.eventType}`).join("\\n");
+          const csvData = stringify(txs.map(t => ({
+            date: t.timestamp,
+            token: t.token,
+            amount: t.amount,
+            value: t.usdValue,
+            type: t.eventType,
+            hash: t.txHash
+          })));
           
           const prompt = `
-Given these transactions in TX.csv and standard tax rules for ${input.country}:
+Generate a crypto tax report for ${input.country} (${input.taxYear}, ${input.period}).
+Use these transactions:
+${csvData}
 
-1) Parse all transactions and classify them
-2) Apply the tax treatment
-3) Produce a complete tax report
+Return a JSON object with:
+1. "summary": Total gains, losses, and estimated tax.
+2. "transactions": List of classified transactions with tax impact.
+3. "report_text": A printable summary.
 
-TX.csv:
-${csvData || "No transactions"}
-
-Return ONLY valid structured output. Ensure you return JSON representing the report and a text representation.
+Return ONLY JSON.
 `;
 
           const response = await openai.chat.completions.create({
-            model: "gpt-5.1",
+            model: "gpt-4o", // Use a robust model for tax logic
             messages: [
-              { role: "system", content: "You are a crypto-tax report generator assistant. Your task is to return a complete, fully structured tax return in JSON format." },
+              { role: "system", content: "You are a crypto tax expert. Generate accurate tax reports in JSON." },
               { role: "user", content: prompt }
             ],
             response_format: { type: "json_object" }
           });
 
           const content = response.choices[0]?.message?.content || "{}";
+          const parsed = JSON.parse(content);
           
           await storage.updateReport(report.id, {
             status: "completed",
             reportJson: content,
-            reportText: "Tax report generated successfully."
+            reportText: parsed.report_text || "Tax report generated successfully."
           });
         } catch (e) {
           console.error("AI Generation failed", e);

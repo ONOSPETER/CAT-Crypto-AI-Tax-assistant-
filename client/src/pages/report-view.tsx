@@ -61,11 +61,18 @@ export default function ReportView() {
         </div>
         
         <div className="flex gap-3">
-          <Button variant="outline" className="border-white/20 bg-background/50 backdrop-blur hover:bg-white/10">
+          <Button 
+            variant="outline" 
+            className="border-white/20 bg-background/50 backdrop-blur hover:bg-white/10"
+            onClick={() => window.open(`/api/reports/${report.id}/download`, '_blank')}
+          >
             <FileText className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-[var(--glow-primary)]">
+          <Button 
+            className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-[var(--glow-primary)]"
+            onClick={() => window.print()}
+          >
             <Download className="w-4 h-4 mr-2" />
             Download PDF
           </Button>
