@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/lucide-react/lucide/main/icons/cat.svg" width="100" height="100" />
+  <img src= "./logo.png" width="100" height="100" />
   <h1>CAT (Crypto AI Tax Assistant)</h1>
   <p><strong>trac1qxd80ulwx4lhauqrpgn779php3g6mq3j7rwddg6s88km0qz2hm0stf9jkw</strong></p>
 </div>
