@@ -9,6 +9,56 @@
     --font-sans: 'DM Sans', sans-serif;
     --font-display: 'Outfit', sans-serif;
 
+    /* Light Theme */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --card-border: 214 32% 91%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --popover-border: 214 32% 91%;
+
+    --primary: 176 100% 40%;
+    --primary-foreground: 0 0% 100%;
+    --primary-border: 176 100% 30%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11.2%;
+    --secondary-border: 214 32% 91%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-border: 214 32% 91%;
+
+    --accent: 262 83% 65%;
+    --accent-foreground: 222 47% 11.2%;
+    --accent-border: 262 83% 55%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --destructive-border: 0 84% 50%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 176 100% 40%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 176 100% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96.1%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 176 100% 40%;
+
+    --radius: 0.75rem;
+    --glow-primary: 0 0 20px -5px hsla(176, 100%, 50%, 0.2);
+  }
+
+  .dark {
     /* Dark Premium Fintech Theme */
     --background: 224 71% 4%;
     --foreground: 213 31% 91%;
@@ -17,11 +67,6 @@
     --card-foreground: 213 31% 91%;
     --card-border: 222 47% 15%;
 
-    --popover: 224 71% 4%;
-    --popover-foreground: 215 20.2% 65.1%;
-    --popover-border: 222 47% 15%;
-
-    /* Primary: Vibrant Cyan / Emerald pop */
     --primary: 176 100% 50%;
     --primary-foreground: 222 47% 11%;
     --primary-border: 176 100% 40%;
@@ -38,33 +83,15 @@
     --accent-foreground: 210 40% 98%;
     --accent-border: 262 83% 55%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --destructive-border: 0 84% 50%;
-
     --border: 222 47% 15%;
     --input: 222 47% 11%;
     --ring: 176 100% 50%;
 
     --sidebar-background: 224 71% 4%;
     --sidebar-foreground: 213 31% 91%;
-    --sidebar-primary: 176 100% 50%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 222 47% 11%;
-    --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 222 47% 11%;
-    --sidebar-ring: 176 100% 50%;
-
-    --radius: 0.75rem;
-
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-md: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
-    --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.4);
     
-    /* Neon Glow */
     --glow-primary: 0 0 20px -5px hsla(176, 100%, 50%, 0.4);
-    --glow-accent: 0 0 20px -5px hsla(262, 83%, 65%, 0.4);
   }
 
   body {

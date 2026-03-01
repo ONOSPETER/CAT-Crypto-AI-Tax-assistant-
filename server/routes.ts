@@ -53,7 +53,24 @@ export async function registerRoutes(
         const chainType = wallet.chain.toLowerCase();
         let history: any[] = [];
 
-        if (chainType.includes('solana')) {
+        if (chainType === 'trac') {
+          // Fetch from Trac Explorer
+          const response = await fetch(`https://explorer.trac.network/api/v1/address/${wallet.address}/transactions`);
+          if (response.ok) {
+            const data: any = await response.json();
+            history = data.transactions.map((tx: any) => ({
+              hash: tx.hash,
+              timestamp: tx.timestamp * 1000,
+              from: tx.from,
+              to: tx.to,
+              asset: "TRAC",
+              amount: tx.amount,
+              usdValue: 0, // Need price feed
+              fee: tx.fee,
+              type: "transfer"
+            }));
+          }
+        } else if (chainType.includes('solana')) {
           const acc = new WalletAccountReadOnlySolana(wallet.address);
           history = await acc.getTransactionHistory();
         } else if (chainType.includes('bitcoin')) {
@@ -81,15 +98,15 @@ export async function registerRoutes(
           count++;
         }
       } catch (e) {
-        console.warn("WDK Sync failed, using enhanced simulation", e);
+        console.warn("WDK/Trac Sync failed, using enhanced simulation", e);
         await storage.createTransaction({
           walletId,
-          txHash: `wdk_${Math.random().toString(16).slice(2)}`,
+          txHash: `${wallet.chain.toLowerCase()}_${Math.random().toString(16).slice(2)}`,
           chain: wallet.chain,
           timestamp: new Date(),
           fromAddress: wallet.address,
           toAddress: `ext_${Math.random().toString(16).slice(2)}`,
-          token: "USDT",
+          token: wallet.chain === 'Trac' ? 'TRAC' : 'USDT',
           amount: (Math.random() * 100).toFixed(2),
           usdValue: (Math.random() * 100).toFixed(2),
           gasFeeUsd: "0.50",
@@ -103,6 +120,35 @@ export async function registerRoutes(
       console.error("Sync error:", err);
       res.status(500).json({ message: "Failed to sync wallet" });
     }
+  });
+
+  app.delete(api.wallets.delete.path, async (req, res) => {
+    const walletId = Number(req.params.id);
+    await storage.deleteWallet(walletId);
+    res.json({ success: true });
+  });
+
+  app.get(api.intercom.list.path, async (req, res) => {
+    const msgs = await storage.getMessages();
+    res.json(msgs);
+  });
+
+  app.post(api.intercom.send.path, async (req, res) => {
+    const { content } = req.body;
+    await storage.createMessage(content, 'user');
+    
+    // AI Reply via Intercom
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are the CAT AI Assistant communicating via Trac Intercom. Be helpful and professional." },
+        { role: "user", content }
+      ]
+    });
+    
+    const reply = response.choices[0]?.message?.content || "I'm here to help!";
+    await storage.createMessage(reply, 'ai');
+    res.json({ reply });
   });
 
   app.get(api.transactions.list.path, async (req, res) => {
@@ -169,14 +215,17 @@ export async function registerRoutes(
           })));
           
           const prompt = `
-Generate a crypto tax report for ${input.country} (${input.taxYear}, ${input.period}).
+Generate an official crypto tax report for ${input.country} (${input.taxYear}, ${input.period}).
 Use these transactions:
 ${csvData}
+
+IMPORTANT: The output must strictly follow the official tax filing standards of ${input.country}.
+For example, if it's USA, use Form 8949 format. If Nigeria, follow FIRS guidelines for Capital Gains Tax (10% rate).
 
 Return a JSON object with:
 1. "summary": Total gains, losses, and estimated tax.
 2. "transactions": List of classified transactions with tax impact.
-3. "report_text": A printable summary.
+3. "report_text": A printable, formal, official-looking document text that matches the country's tax form requirements exactly.
 
 Return ONLY JSON.
 `;

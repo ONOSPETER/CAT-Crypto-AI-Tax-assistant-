@@ -85,3 +85,34 @@ export function useSyncWallet() {
     },
   });
 }
+
+export function useDeleteWallet() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.wallets.delete.path, { id });
+      const res = await fetch(url, { 
+        method: api.wallets.delete.method, 
+        credentials: "include" 
+      });
+      if (!res.ok) throw new Error("Failed to delete wallet");
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.wallets.list.path] });
+      toast({
+        title: "Wallet deleted",
+        description: "The wallet has been removed from your portfolio.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}

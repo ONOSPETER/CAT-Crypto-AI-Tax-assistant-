@@ -7,8 +7,15 @@ import { z } from "zod";
 export const wallets = pgTable("wallets", {
   id: serial("id").primaryKey(),
   address: text("address").notNull(),
-  chain: text("chain").notNull(), // 'Ethereum', 'Polygon', 'Solana', 'Bitcoin'
+  chain: text("chain").notNull(), // 'Ethereum', 'Polygon', 'Solana', 'Bitcoin', 'Trac'
   label: text("label"),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull(),
+  sender: text("sender").notNull(), // 'user', 'ai'
+  timestamp: timestamp("timestamp").defaultNow(),
 });
 
 export const transactions = pgTable("transactions", {

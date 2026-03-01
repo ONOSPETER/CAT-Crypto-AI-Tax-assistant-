@@ -17,6 +17,7 @@ export interface IStorage {
   getWallets(): Promise<Wallet[]>;
   getWallet(id: number): Promise<Wallet | undefined>;
   createWallet(wallet: InsertWallet): Promise<Wallet>;
+  deleteWallet(id: number): Promise<void>;
 
   // Transactions
   getTransactions(): Promise<Transaction[]>;
@@ -28,6 +29,10 @@ export interface IStorage {
   getReport(id: number): Promise<TaxReport | undefined>;
   createReport(report: InsertTaxReport): Promise<TaxReport>;
   updateReport(id: number, updates: Partial<InsertTaxReport>): Promise<TaxReport>;
+
+  // Intercom
+  getMessages(): Promise<any[]>;
+  createMessage(content: string, sender: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -44,6 +49,11 @@ export class DatabaseStorage implements IStorage {
   async createWallet(insertWallet: InsertWallet): Promise<Wallet> {
     const [wallet] = await db.insert(wallets).values(insertWallet).returning();
     return wallet;
+  }
+
+  async deleteWallet(id: number): Promise<void> {
+    await db.delete(transactions).where(eq(transactions.walletId, id));
+    await db.delete(wallets).where(eq(wallets.id, id));
   }
 
   // Transactions
@@ -82,6 +92,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(taxReports.id, id))
       .returning();
     return report;
+  }
+
+  // Intercom
+  async getMessages(): Promise<any[]> {
+    const { messages } = await import("@shared/schema");
+    return await db.select().from(messages).orderBy(messages.timestamp);
+  }
+
+  async createMessage(content: string, sender: string): Promise<any> {
+    const { messages } = await import("@shared/schema");
+    const [message] = await db.insert(messages).values({ content, sender }).returning();
+    return message;
   }
 }
 

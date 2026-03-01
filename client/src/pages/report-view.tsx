@@ -40,7 +40,7 @@ export default function ReportView() {
 
   return (
     <Layout>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-4">
           <Link href="/reports">
             <Button variant="ghost" size="icon" className="hover:bg-white/10 rounded-full w-10 h-10">
@@ -81,22 +81,22 @@ export default function ReportView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="col-span-1 lg:col-span-2 space-y-6">
-          <Card className="glass-panel border-white/10 shadow-2xl">
-            <div className="p-4 border-b border-white/10 bg-white/[0.02] flex items-center justify-between rounded-t-xl">
+          <Card className="glass-panel border-white/10 shadow-2xl print:border-none print:shadow-none print:bg-white">
+            <div className="p-4 border-b border-white/10 bg-white/[0.02] flex items-center justify-between rounded-t-xl print:hidden">
               <div className="font-mono text-xs text-muted-foreground flex gap-4">
                 <span>OFFICIAL FORM LAYOUT</span>
                 <span>STATUS: FINAL</span>
               </div>
             </div>
             <CardContent className="p-0">
-              <div className="bg-[#0A0A0A] p-6 md:p-10 font-mono text-sm md:text-base text-gray-300 leading-relaxed overflow-x-auto whitespace-pre-wrap min-h-[600px] rounded-b-xl border-t border-white/5 shadow-inner">
+              <div className="bg-[#0A0A0A] p-6 md:p-10 font-mono text-sm md:text-base text-gray-300 leading-relaxed overflow-x-auto whitespace-pre-wrap min-h-[600px] rounded-b-xl border-t border-white/5 shadow-inner print:bg-white print:text-black print:p-0">
                 {report.reportText || "No text content generated yet."}
               </div>
             </CardContent>
           </Card>
         </div>
         
-        <div className="col-span-1 space-y-6">
+        <div className="col-span-1 space-y-6 print:hidden">
           <Card className="glass-panel border-white/10">
             <CardContent className="p-6">
               <h3 className="font-display font-bold text-lg mb-4 text-white">Report Metadata</h3>

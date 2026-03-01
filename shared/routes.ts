@@ -39,6 +39,31 @@ export const api = {
         200: z.object({ success: z.boolean(), count: z.number() }),
         404: errorSchemas.notFound,
       }
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/wallets/:id' as const,
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      }
+    }
+  },
+  intercom: {
+    send: {
+      method: 'POST' as const,
+      path: '/api/intercom' as const,
+      input: z.object({ content: z.string() }),
+      responses: {
+        200: z.object({ reply: z.string() }),
+      }
+    },
+    list: {
+      method: 'GET' as const,
+      path: '/api/intercom' as const,
+      responses: {
+        200: z.array(z.object({ id: z.number(), content: z.string(), sender: z.string(), timestamp: z.string() })),
+      }
     }
   },
   transactions: {

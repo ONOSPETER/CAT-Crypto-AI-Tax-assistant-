@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useWallets, useCreateWallet, useSyncWallet } from "@/hooks/use-wallets";
+import { useWallets, useCreateWallet, useSyncWallet, useDeleteWallet } from "@/hooks/use-wallets";
 import { useTransactions } from "@/hooks/use-transactions";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -29,8 +29,22 @@ import {
   ArrowUpRight, 
   ArrowDownRight, 
   Activity,
-  Coins
+  Coins,
+  Trash2,
+  MessageSquare
 } from "lucide-react";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function Dashboard() {
@@ -38,16 +52,24 @@ export default function Dashboard() {
   const { data: transactions = [] } = useTransactions();
   const createWallet = useCreateWallet();
   const syncWallet = useSyncWallet();
+  const deleteWallet = useDeleteWallet();
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isIntercomOpen, setIsIntercomOpen] = useState(false);
   const [chain, setChain] = useState<string>("Ethereum");
   const [address, setAddress] = useState("");
   const [label, setLabel] = useState("");
+  const [intercomMsg, setIntercomMsg] = useState("");
+  const [messages, setMessages] = useState<{sender: string, content: string}[]>([]);
 
   const handleConnect = () => {
     createWallet.mutate(
       { chain, address, label },
-      { onSuccess: () => setIsDialogOpen(false) }
+      { onSuccess: () => {
+        setIsDialogOpen(false);
+        setAddress("");
+        setLabel("");
+      }}
     );
   };
 
@@ -55,7 +77,29 @@ export default function Dashboard() {
     syncWallet.mutate(id);
   };
 
-  // Mock data for chart - in a real app this would aggregate transactions
+  const handleDelete = (id: number) => {
+    deleteWallet.mutate(id);
+  };
+
+  const handleSendIntercom = async () => {
+    if (!intercomMsg.trim()) return;
+    const userMsg = { sender: 'user', content: intercomMsg };
+    setMessages(prev => [...prev, userMsg]);
+    setIntercomMsg("");
+    
+    try {
+      const res = await fetch('/api/intercom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: intercomMsg })
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { sender: 'ai', content: data.reply }]);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const mockChartData = [
     { name: "Jan", income: 4000, expense: 2400 },
     { name: "Feb", income: 3000, expense: 1398 },
@@ -72,67 +116,105 @@ export default function Dashboard() {
           <h1 className="text-3xl md:text-4xl font-display font-bold text-gradient">Portfolio Overview</h1>
           <p className="text-muted-foreground mt-2">Manage your connected wallets and track taxable events.</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-[var(--glow-primary)]">
-              <Plus className="w-4 h-4 mr-2" />
-              Connect Wallet
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="glass-panel sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle className="font-display text-2xl">Connect Wallet</DialogTitle>
-              <DialogDescription>
-                Add a public address to track your multi-chain transactions.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-6 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="chain">Blockchain</Label>
-                <Select value={chain} onValueChange={setChain}>
-                  <SelectTrigger className="bg-background border-white/10">
-                    <SelectValue placeholder="Select chain" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Ethereum">Ethereum</SelectItem>
-                    <SelectItem value="Polygon">Polygon</SelectItem>
-                    <SelectItem value="Solana">Solana</SelectItem>
-                    <SelectItem value="Bitcoin">Bitcoin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Public Address</Label>
-                <Input 
-                  id="address" 
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="0x..." 
-                  className="bg-background border-white/10"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="label">Label (Optional)</Label>
-                <Input 
-                  id="label" 
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="e.g. Main Vault" 
-                  className="bg-background border-white/10"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button 
-                onClick={handleConnect} 
-                disabled={createWallet.isPending || !address}
-                className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground"
-              >
-                {createWallet.isPending ? "Connecting..." : "Connect"}
+        <div className="flex gap-2">
+          <Dialog open={isIntercomOpen} onOpenChange={setIsIntercomOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-white/10 bg-background/50">
+                <MessageSquare className="w-4 h-4 mr-2 text-primary" />
+                Intercom
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="glass-panel sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>CAT Intercom</DialogTitle>
+                <DialogDescription>Chat with CAT AI about your tax positions via Trac Network.</DialogDescription>
+              </DialogHeader>
+              <ScrollArea className="h-[300px] p-4 border rounded-md border-white/10 bg-black/20">
+                {messages.length === 0 && <p className="text-center text-muted-foreground text-sm mt-20">No messages yet. Ask CAT anything!</p>}
+                {messages.map((m, i) => (
+                  <div key={i} className={`mb-4 flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.sender === 'user' ? 'bg-primary text-primary-foreground rounded-tr-none' : 'bg-white/10 text-white rounded-tl-none'}`}>
+                      {m.content}
+                    </div>
+                  </div>
+                ))}
+              </ScrollArea>
+              <div className="flex gap-2 mt-4">
+                <Input 
+                  value={intercomMsg} 
+                  onChange={e => setIntercomMsg(e.target.value)} 
+                  placeholder="Type a message..."
+                  className="bg-background border-white/10"
+                  onKeyDown={e => e.key === 'Enter' && handleSendIntercom()}
+                />
+                <Button onClick={handleSendIntercom}>Send</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-[var(--glow-primary)]">
+                <Plus className="w-4 h-4 mr-2" />
+                Connect Wallet
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="glass-panel sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle className="font-display text-2xl">Connect Wallet</DialogTitle>
+                <DialogDescription>
+                  Add a public address to track your multi-chain transactions.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-6 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="chain">Blockchain</Label>
+                  <Select value={chain} onValueChange={setChain}>
+                    <SelectTrigger className="bg-background border-white/10">
+                      <SelectValue placeholder="Select chain" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Ethereum">Ethereum</SelectItem>
+                      <SelectItem value="Polygon">Polygon</SelectItem>
+                      <SelectItem value="Solana">Solana</SelectItem>
+                      <SelectItem value="Bitcoin">Bitcoin</SelectItem>
+                      <SelectItem value="Trac">Trac Network</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Public Address</Label>
+                  <Input 
+                    id="address" 
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Address" 
+                    className="bg-background border-white/10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="label">Label (Optional)</Label>
+                  <Input 
+                    id="label" 
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    placeholder="e.g. Main Vault" 
+                    className="bg-background border-white/10"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button 
+                  onClick={handleConnect} 
+                  disabled={createWallet.isPending || !address}
+                  className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground"
+                >
+                  {createWallet.isPending ? "Connecting..." : "Connect"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -225,16 +307,34 @@ export default function Dashboard() {
                           {wallet.chain}
                         </p>
                       </div>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleSync(wallet.id)}
-                        disabled={syncWallet.isPending && syncWallet.variables === wallet.id}
-                        title="Sync Transactions"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${syncWallet.isPending && syncWallet.variables === wallet.id ? 'animate-spin text-primary' : 'text-muted-foreground'}`} />
-                      </Button>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="w-8 h-8"
+                          onClick={() => handleSync(wallet.id)}
+                          disabled={syncWallet.isPending && syncWallet.variables === wallet.id}
+                        >
+                          <RefreshCw className={`w-4 h-4 ${syncWallet.isPending && syncWallet.variables === wallet.id ? 'animate-spin text-primary' : 'text-muted-foreground'}`} />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="w-8 h-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="glass-panel border-white/10">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Wallet?</AlertDialogTitle>
+                              <AlertDialogDescription>This will remove the wallet and all its synced transactions from CAT. This action cannot be undone.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="bg-white/5 border-white/10 text-white">Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(wallet.id)} className="bg-destructive text-white hover:bg-destructive/90">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
                     <div className="font-mono text-xs text-muted-foreground/80 truncate bg-black/40 p-2 rounded-md border border-white/5">
                       {wallet.address}
