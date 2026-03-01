@@ -33,7 +33,11 @@
 </p>
 
 <h2>Demo</h2>
-<video src="./demo.mp4" width="100%" autoplay loop muted playsinline/>
+<p align="center">
+  <a href="./demo.mp4">
+    ▶️ Click here to watch the demo
+  </a>
+</p>
 
 <h2>Installation & Setup</h2>
 <pre>
