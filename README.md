@@ -34,9 +34,12 @@
 
 <h2>Demo</h2>
 <p align="center">
-  <a href="./demo.mp4">
-    ▶️ Click here to watch the demo
+  <a href="https://youtube.com/shorts/DfcRJezFEuk">
+    <img src="https://img.youtube.com/vi/DfcRJezFEuk/maxresdefault.jpg" width="100%" />
   </a>
+</p>
+<p align="center">
+  ▶️ Click to watch the live demo
 </p>
 
 <h2>Installation & Setup</h2>
