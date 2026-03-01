@@ -33,9 +33,7 @@
 </p>
 
 <h2>Demo</h2>
-<video src="./demo.mp4" width="100%" controls>
-  Your browser does not support the video tag.
-</video>
+<video src="./demo.mp4" width="100%" autoplay loop muted playsinline/>
 
 <h2>Installation & Setup</h2>
 <pre>
