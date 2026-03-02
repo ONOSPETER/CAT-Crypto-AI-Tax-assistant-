@@ -48,7 +48,75 @@ export async function registerRoutes(
       const userId = getUserId(req);
       const input = api.wallets.create.input.parse(req.body);
       const wallet = await storage.createWallet({ ...input, userId });
+      
+      // Auto-sync after creation to show value immediately
       res.status(201).json(wallet);
+
+      // Trigger sync in background
+      (async () => {
+        try {
+          const walletId = wallet.id;
+          const chainType = wallet.chain.toLowerCase();
+          let history: any[] = [];
+          let balance = "0";
+          let balanceUsd = "0";
+
+          if (chainType === 'trac') {
+            const response = await fetch(`https://explorer.trac.network/api/v1/address/${wallet.address}/transactions`);
+            if (response.ok) {
+              const data: any = await response.json();
+              balance = data.balance || "0";
+              history = data.transactions.map((tx: any) => ({
+                hash: tx.hash,
+                timestamp: tx.timestamp * 1000,
+                from: tx.from,
+                to: tx.to,
+                asset: "TRAC",
+                amount: tx.amount,
+                usdValue: 0,
+                fee: tx.fee,
+                type: "transfer"
+              }));
+            }
+          } else if (chainType.includes('solana')) {
+            const acc = new WalletAccountReadOnlySolana(wallet.address);
+            history = await acc.getTransactionHistory();
+            const b = await acc.getBalance();
+            balance = b.toString();
+          } else if (chainType.includes('bitcoin')) {
+            const acc = new WalletAccountReadOnlyBtc(wallet.address);
+            history = await acc.getTransactionHistory();
+            const b = await acc.getBalance();
+            balance = b.toString();
+          } else {
+            const acc = new WalletAccountReadOnlyEvm(wallet.address);
+            history = await acc.getTransactionHistory();
+            const b = await acc.getBalance();
+            balance = b.toString();
+          }
+          
+          balanceUsd = (parseFloat(balance) * 2500).toString();
+          await storage.updateWalletBalance(walletId, balance, balanceUsd);
+          
+          for (const tx of history) {
+            await storage.createTransaction({
+              walletId,
+              txHash: tx.hash,
+              chain: wallet.chain,
+              timestamp: new Date(tx.timestamp),
+              fromAddress: tx.from,
+              toAddress: tx.to,
+              token: tx.asset || "Native",
+              amount: tx.amount.toString(),
+              usdValue: tx.usdValue?.toString() || "0",
+              gasFeeUsd: tx.fee?.toString() || "0",
+              eventType: tx.type || "transfer"
+            });
+          }
+        } catch (e) {
+          console.error("Auto-sync failed:", e);
+        }
+      })();
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({

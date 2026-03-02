@@ -12,6 +12,7 @@ export function useWallets() {
       const data = await res.json();
       return api.wallets.list.responses[200].parse(data);
     },
+    refetchInterval: 5000, // Poll every 5 seconds to show balance updates
   });
 }
 

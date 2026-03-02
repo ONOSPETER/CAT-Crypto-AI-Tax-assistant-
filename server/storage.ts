@@ -18,6 +18,7 @@ export interface IStorage {
   getWallet(id: number): Promise<Wallet | undefined>;
   createWallet(wallet: InsertWallet & { userId: string }): Promise<Wallet>;
   deleteWallet(id: number): Promise<void>;
+  updateWalletBalance(id: number, balance: string, balanceUsd: string): Promise<void>;
 
   // Transactions
   getTransactions(userId: string): Promise<Transaction[]>;
@@ -54,6 +55,12 @@ export class DatabaseStorage implements IStorage {
   async deleteWallet(id: number): Promise<void> {
     await db.delete(transactions).where(eq(transactions.walletId, id));
     await db.delete(wallets).where(eq(wallets.id, id));
+  }
+
+  async updateWalletBalance(id: number, balance: string, balanceUsd: string): Promise<void> {
+    await db.update(wallets)
+      .set({ balance, balanceUsd })
+      .where(eq(wallets.id, id));
   }
 
   // Transactions
