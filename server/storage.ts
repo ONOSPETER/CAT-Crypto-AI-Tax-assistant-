@@ -14,31 +14,31 @@ import {
 
 export interface IStorage {
   // Wallets
-  getWallets(): Promise<Wallet[]>;
+  getWallets(userId: string): Promise<Wallet[]>;
   getWallet(id: number): Promise<Wallet | undefined>;
-  createWallet(wallet: InsertWallet): Promise<Wallet>;
+  createWallet(wallet: InsertWallet & { userId: string }): Promise<Wallet>;
   deleteWallet(id: number): Promise<void>;
 
   // Transactions
-  getTransactions(): Promise<Transaction[]>;
+  getTransactions(userId: string): Promise<Transaction[]>;
   getTransactionsByWallet(walletId: number): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
 
   // Reports
-  getReports(): Promise<TaxReport[]>;
+  getReports(userId: string): Promise<TaxReport[]>;
   getReport(id: number): Promise<TaxReport | undefined>;
-  createReport(report: InsertTaxReport): Promise<TaxReport>;
+  createReport(report: InsertTaxReport & { userId: string }): Promise<TaxReport>;
   updateReport(id: number, updates: Partial<InsertTaxReport>): Promise<TaxReport>;
 
   // Intercom
-  getMessages(): Promise<any[]>;
-  createMessage(content: string, sender: string): Promise<any>;
+  getMessages(userId: string): Promise<any[]>;
+  createMessage(content: string, sender: string, userId: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
   // Wallets
-  async getWallets(): Promise<Wallet[]> {
-    return await db.select().from(wallets);
+  async getWallets(userId: string): Promise<Wallet[]> {
+    return await db.select().from(wallets).where(eq(wallets.userId, userId));
   }
 
   async getWallet(id: number): Promise<Wallet | undefined> {
@@ -46,7 +46,7 @@ export class DatabaseStorage implements IStorage {
     return wallet;
   }
 
-  async createWallet(insertWallet: InsertWallet): Promise<Wallet> {
+  async createWallet(insertWallet: InsertWallet & { userId: string }): Promise<Wallet> {
     const [wallet] = await db.insert(wallets).values(insertWallet).returning();
     return wallet;
   }
@@ -57,8 +57,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Transactions
-  async getTransactions(): Promise<Transaction[]> {
-    return await db.select().from(transactions);
+  async getTransactions(userId: string): Promise<Transaction[]> {
+    return await db.select({
+      id: transactions.id,
+      walletId: transactions.walletId,
+      txHash: transactions.txHash,
+      chain: transactions.chain,
+      timestamp: transactions.timestamp,
+      fromAddress: transactions.fromAddress,
+      toAddress: transactions.toAddress,
+      token: transactions.token,
+      amount: transactions.amount,
+      usdValue: transactions.usdValue,
+      gasFeeUsd: transactions.gasFeeUsd,
+      eventType: transactions.eventType
+    })
+    .from(transactions)
+    .innerJoin(wallets, eq(transactions.walletId, wallets.id))
+    .where(eq(wallets.userId, userId));
   }
 
   async getTransactionsByWallet(walletId: number): Promise<Transaction[]> {
@@ -71,8 +87,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Reports
-  async getReports(): Promise<TaxReport[]> {
-    return await db.select().from(taxReports);
+  async getReports(userId: string): Promise<TaxReport[]> {
+    return await db.select().from(taxReports).where(eq(taxReports.userId, userId));
   }
 
   async getReport(id: number): Promise<TaxReport | undefined> {
@@ -80,7 +96,7 @@ export class DatabaseStorage implements IStorage {
     return report;
   }
 
-  async createReport(insertReport: InsertTaxReport): Promise<TaxReport> {
+  async createReport(insertReport: InsertTaxReport & { userId: string }): Promise<TaxReport> {
     const [report] = await db.insert(taxReports).values(insertReport).returning();
     return report;
   }
@@ -95,14 +111,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Intercom
-  async getMessages(): Promise<any[]> {
+  async getMessages(userId: string): Promise<any[]> {
     const { messages } = await import("@shared/schema");
-    return await db.select().from(messages).orderBy(messages.timestamp);
+    return await db.select().from(messages).where(eq(messages.userId, userId)).orderBy(messages.timestamp);
   }
 
-  async createMessage(content: string, sender: string): Promise<any> {
+  async createMessage(content: string, sender: string, userId: string): Promise<any> {
     const { messages } = await import("@shared/schema");
-    const [message] = await db.insert(messages).values({ content, sender }).returning();
+    const [message] = await db.insert(messages).values({ content, sender, userId }).returning();
     return message;
   }
 }

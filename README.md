@@ -10,7 +10,7 @@
 <p>
   CAT is an autonomous, AI-powered tax assistant designed for the multi-chain crypto ecosystem. It solves the complexity of cross-chain tax reporting by automatically aggregating transaction data, identifying taxable events, and generating country-specific, ready-to-file tax documents.
 </p>
-
+<a href= "https://crypto-tax-assistant--sarahken001x.replit.app/">Live demo</a>
 <h2>Key Features</h2>
 <ul>
   <li><strong>Multi-Chain Sync:</strong> Connect Ethereum, Polygon, Solana, Bitcoin, and Trac Network wallets.</li>

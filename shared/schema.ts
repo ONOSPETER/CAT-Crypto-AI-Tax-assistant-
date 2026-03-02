@@ -9,6 +9,9 @@ export const wallets = pgTable("wallets", {
   address: text("address").notNull(),
   chain: text("chain").notNull(), // 'Ethereum', 'Polygon', 'Solana', 'Bitcoin', 'Trac'
   label: text("label"),
+  userId: text("user_id").notNull(),
+  balance: text("balance").default("0"),
+  balanceUsd: numeric("balance_usd").default("0"),
 });
 
 export const messages = pgTable("messages", {
@@ -16,6 +19,7 @@ export const messages = pgTable("messages", {
   content: text("content").notNull(),
   sender: text("sender").notNull(), // 'user', 'ai'
   timestamp: timestamp("timestamp").defaultNow(),
+  userId: text("user_id").notNull(),
 });
 
 export const transactions = pgTable("transactions", {
@@ -42,6 +46,7 @@ export const taxReports = pgTable("tax_reports", {
   reportText: text("report_text"),
   status: text("status").notNull(), // 'generating', 'completed', 'failed'
   createdAt: timestamp("created_at").defaultNow(),
+  userId: text("user_id").notNull(),
 });
 
 // --- BASE SCHEMAS ---

@@ -14,20 +14,39 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
+
+const PostgresStore = connectPg(session);
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Session setup
+  app.use(
+    session({
+      store: new PostgresStore({ pool, createTableIfMissing: true }),
+      secret: process.env.SESSION_SECRET || "cat-assistant-secret",
+      resave: false,
+      saveUninitialized: true,
+      cookie: { secure: false, maxAge: 30 * 24 * 60 * 60 * 1000 }, // 30 days
+    })
+  );
+
+  // Helper to get session ID
+  const getUserId = (req: any) => req.sessionID;
 
   app.get(api.wallets.list.path, async (req, res) => {
-    const wallets = await storage.getWallets();
+    const wallets = await storage.getWallets(getUserId(req));
     res.json(wallets);
   });
 
   app.post(api.wallets.create.path, async (req, res) => {
     try {
       const input = api.wallets.create.input.parse(req.body);
-      const wallet = await storage.createWallet(input);
+      const wallet = await storage.createWallet({ ...input, userId: getUserId(req) });
       res.status(201).json(wallet);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -53,11 +72,17 @@ export async function registerRoutes(
         const chainType = wallet.chain.toLowerCase();
         let history: any[] = [];
 
+        let balance = "0";
+        let balanceUsd = "0";
+
         if (chainType === 'trac') {
           // Fetch from Trac Explorer
           const response = await fetch(`https://explorer.trac.network/api/v1/address/${wallet.address}/transactions`);
           if (response.ok) {
             const data: any = await response.json();
+            // Estimate balance from last tx or specific endpoint if available
+            // For now, let's assume we fetch a balance endpoint if it exists, otherwise use a placeholder
+            balance = data.balance || "0"; 
             history = data.transactions.map((tx: any) => ({
               hash: tx.hash,
               timestamp: tx.timestamp * 1000,
@@ -65,7 +90,7 @@ export async function registerRoutes(
               to: tx.to,
               asset: "TRAC",
               amount: tx.amount,
-              usdValue: 0, // Need price feed
+              usdValue: 0,
               fee: tx.fee,
               type: "transfer"
             }));
@@ -73,13 +98,24 @@ export async function registerRoutes(
         } else if (chainType.includes('solana')) {
           const acc = new WalletAccountReadOnlySolana(wallet.address);
           history = await acc.getTransactionHistory();
+          const b = await acc.getBalance();
+          balance = b.toString();
         } else if (chainType.includes('bitcoin')) {
           const acc = new WalletAccountReadOnlyBtc(wallet.address);
           history = await acc.getTransactionHistory();
+          const b = await acc.getBalance();
+          balance = b.toString();
         } else {
           const acc = new WalletAccountReadOnlyEvm(wallet.address);
           history = await acc.getTransactionHistory();
+          const b = await acc.getBalance();
+          balance = b.toString();
         }
+        
+        // Mock price for USD conversion if not provided
+        balanceUsd = (parseFloat(balance) * 2500).toString(); // Assuming ETH-like price for demo
+
+        await db.update(wallets).set({ balance, balanceUsd }).where(eq(wallets.id, walletId));
         
         for (const tx of history) {
           await storage.createTransaction({
@@ -129,13 +165,14 @@ export async function registerRoutes(
   });
 
   app.get(api.intercom.list.path, async (req, res) => {
-    const msgs = await storage.getMessages();
+    const msgs = await storage.getMessages(getUserId(req));
     res.json(msgs);
   });
 
   app.post(api.intercom.send.path, async (req, res) => {
     const { content } = req.body;
-    await storage.createMessage(content, 'user');
+    const userId = getUserId(req);
+    await storage.createMessage(content, 'user', userId);
     
     // AI Reply via Intercom
     const response = await openai.chat.completions.create({
@@ -147,17 +184,17 @@ export async function registerRoutes(
     });
     
     const reply = response.choices[0]?.message?.content || "I'm here to help!";
-    await storage.createMessage(reply, 'ai');
+    await storage.createMessage(reply, 'ai', userId);
     res.json({ reply });
   });
 
   app.get(api.transactions.list.path, async (req, res) => {
-    const txs = await storage.getTransactions();
+    const txs = await storage.getTransactions(getUserId(req));
     res.json(txs);
   });
 
   app.get(api.reports.list.path, async (req, res) => {
-    const reports = await storage.getReports();
+    const reports = await storage.getReports(getUserId(req));
     res.json(reports);
   });
 
@@ -192,19 +229,21 @@ export async function registerRoutes(
   app.post(api.reports.generate.path, async (req, res) => {
     try {
       const input = api.reports.generate.input.parse(req.body);
+      const userId = getUserId(req);
 
       const report = await storage.createReport({
         country: input.country,
         taxYear: input.taxYear,
         period: input.period,
-        status: "generating"
+        status: "generating",
+        userId
       });
       
       res.status(201).json(report);
 
       (async () => {
         try {
-          const txs = await storage.getTransactions();
+          const txs = await storage.getTransactions(userId);
           const csvData = stringify(txs.map(t => ({
             date: t.timestamp,
             token: t.token,

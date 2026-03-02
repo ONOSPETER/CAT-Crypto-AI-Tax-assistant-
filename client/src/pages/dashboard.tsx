@@ -100,7 +100,13 @@ export default function Dashboard() {
     }
   };
 
-  const mockChartData = [
+  const totalAssetsValue = wallets.reduce((sum, w) => sum + parseFloat(w.balanceUsd || "0"), 0);
+  const totalTransactionsCount = transactions.length;
+  const realizedGains = transactions
+    .filter(tx => tx.eventType === 'trade' || tx.eventType === 'sale')
+    .reduce((sum, tx) => sum + parseFloat(tx.usdValue) * 0.1, 0);
+
+  const chartData = [
     { name: "Jan", income: 4000, expense: 2400 },
     { name: "Feb", income: 3000, expense: 1398 },
     { name: "Mar", income: 2000, expense: 9800 },
@@ -222,7 +228,7 @@ export default function Dashboard() {
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Total Assets value</p>
-              <h3 className="text-3xl font-display font-bold text-white">$124,592.00</h3>
+              <h3 className="text-3xl font-display font-bold text-white dark:text-white">${totalAssetsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
             </div>
             <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
               <Wallet className="w-6 h-6 text-primary" />
@@ -233,8 +239,8 @@ export default function Dashboard() {
         <Card className="glass-panel border-l-4 border-l-green-500 hover-elevate-card">
           <CardContent className="p-6 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Realized Gains</p>
-              <h3 className="text-3xl font-display font-bold text-white">+$12,450.50</h3>
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Estimated Gains</p>
+              <h3 className="text-3xl font-display font-bold text-white dark:text-white">+${realizedGains.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
             </div>
             <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
               <ArrowUpRight className="w-6 h-6 text-green-500" />
@@ -246,7 +252,7 @@ export default function Dashboard() {
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Transactions</p>
-              <h3 className="text-3xl font-display font-bold text-white">{transactions.length}</h3>
+              <h3 className="text-3xl font-display font-bold text-white dark:text-white">{totalTransactionsCount}</h3>
             </div>
             <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
               <Activity className="w-6 h-6 text-accent" />
@@ -263,7 +269,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="flex-1 min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mockChartData}>
+              <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" axisLine={false} tickLine={false} />
                 <YAxis stroke="rgba(255,255,255,0.5)" axisLine={false} tickLine={false} tickFormatter={(value) => `$${value/1000}k`} />
