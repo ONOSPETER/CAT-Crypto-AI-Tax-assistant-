@@ -51,7 +51,7 @@ export const taxReports = pgTable("tax_reports", {
 
 // --- BASE SCHEMAS ---
 
-export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true });
+export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, userId: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true });
 export const insertTaxReportSchema = createInsertSchema(taxReports).omit({ id: true, createdAt: true, reportJson: true, reportText: true });
 

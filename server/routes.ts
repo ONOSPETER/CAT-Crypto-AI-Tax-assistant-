@@ -45,8 +45,9 @@ export async function registerRoutes(
 
   app.post(api.wallets.create.path, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const input = api.wallets.create.input.parse(req.body);
-      const wallet = await storage.createWallet({ ...input, userId: getUserId(req) });
+      const wallet = await storage.createWallet({ ...input, userId });
       res.status(201).json(wallet);
     } catch (err) {
       if (err instanceof z.ZodError) {
