@@ -8,6 +8,20 @@ import WalletManagerEvm from '@tetherto/wdk-wallet-evm';
 import WalletManagerTron from '@tetherto/wdk-wallet-tron';
 import WalletManagerBtc from '@tetherto/wdk-wallet-btc';
 import axios from 'axios';
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import OpenAI from "openai";
+import { stringify } from "csv-stringify/sync";
+import { pool, db } from "./db";
+import { wallets } from "@shared/schema";
+import { eq } from "drizzle-orm";
+
+const PostgresStore = connectPg(session);
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
 
 const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
 
@@ -32,7 +46,7 @@ async function getTronTransactions(address: string) {
 function filterLastYear(txs: any[]) {
   const now = Date.now();
   return txs.filter(tx => {
-    const ts = (tx.timeStamp || tx.block_timestamp || tx.status?.block_time || 0) * 1000;
+    const ts = (tx.timeStamp || tx.block_timestamp || tx.raw_data?.timestamp || tx.status?.block_time || 0) * (tx.raw_data?.timestamp ? 1 : 1000);
     return now - ts <= ONE_YEAR;
   });
 }
@@ -94,9 +108,10 @@ export async function registerRoutes(
             const b = await account.getBalance();
             balance = b.toString();
             const txs = await getEthereumTransactions(walletAddress);
-            history = filterLastYear(txs).map((tx: any) => ({
+            const filteredTxs = filterLastYear(txs);
+            history = filteredTxs.map((tx: any) => ({
               hash: tx.hash,
-              timestamp: tx.timeStamp * 1000,
+              timestamp: parseInt(tx.timeStamp) * 1000,
               from: tx.from,
               to: tx.to,
               asset: "ETH",
@@ -110,7 +125,8 @@ export async function registerRoutes(
             const b = await account.getBalance();
             balance = b.toString();
             const txs = await getTronTransactions(walletAddress);
-            history = filterLastYear(txs).map((tx: any) => ({
+            const filteredTxs = filterLastYear(txs);
+            history = filteredTxs.map((tx: any) => ({
               hash: tx.txID,
               timestamp: tx.raw_data.timestamp,
               from: tx.raw_data.contract[0].parameter.value.owner_address,
@@ -126,13 +142,14 @@ export async function registerRoutes(
             const b = await account.getBalance();
             balance = b.toString();
             const txs = await getBitcoinTransactions(walletAddress);
-            history = filterLastYear(txs).map((tx: any) => ({
+            const filteredTxs = filterLastYear(txs);
+            history = filteredTxs.map((tx: any) => ({
               hash: tx.txid,
               timestamp: (tx.status?.block_time || 0) * 1000,
               from: "unknown",
               to: walletAddress,
               asset: "BTC",
-              amount: 0, // Simplified
+              amount: 0, 
               usdValue: 0,
               fee: tx.fee || 0,
               type: "transfer"
@@ -180,56 +197,74 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Wallet not found" });
       }
 
-      let count = 0;
+      const walletAddress = wallet.address;
+      const seedPhrase = WDK.getRandomSeedPhrase();
+      const wdk = new WDK(seedPhrase)
+        .registerWallet('ethereum', WalletManagerEvm, { provider: 'https://eth.drpc.org' })
+        .registerWallet('tron', WalletManagerTron, { provider: 'https://api.trongrid.io' })
+        .registerWallet('bitcoin', WalletManagerBtc, {
+          network: 'mainnet',
+          host: 'electrum.blockstream.info',
+          port: 50001
+        });
+
+      let balance = "0";
+      let history: any[] = [];
+
       try {
-        const chainType = wallet.chain.toLowerCase();
-        let history: any[] = [];
-
-        let balance = "0";
-        let balanceUsd = "0";
-
-        if (chainType === 'trac') {
-          // Fetch from Trac Explorer
-          const response = await fetch(`https://explorer.trac.network/api/v1/address/${wallet.address}/transactions`);
-          if (response.ok) {
-            const data: any = await response.json();
-            // Estimate balance from last tx or specific endpoint if available
-            // For now, let's assume we fetch a balance endpoint if it exists, otherwise use a placeholder
-            balance = data.balance || "0"; 
-            history = data.transactions.map((tx: any) => ({
-              hash: tx.hash,
-              timestamp: tx.timestamp * 1000,
-              from: tx.from,
-              to: tx.to,
-              asset: "TRAC",
-              amount: tx.amount,
-              usdValue: 0,
-              fee: tx.fee,
-              type: "transfer"
-            }));
-          }
-        } else if (chainType.includes('solana')) {
-          const acc = new WalletAccountReadOnlySolana(wallet.address);
-          history = await acc.getTransactionHistory();
-          const b = await acc.getBalance();
+        if (walletAddress.startsWith("0x")) {
+          const account = await wdk.getAccount('ethereum', 0);
+          const b = await account.getBalance();
           balance = b.toString();
-        } else if (chainType.includes('bitcoin')) {
-          const acc = new WalletAccountReadOnlyBtc(wallet.address);
-          history = await acc.getTransactionHistory();
-          const b = await acc.getBalance();
+          const txs = await getEthereumTransactions(walletAddress);
+          history = filterLastYear(txs).map((tx: any) => ({
+            hash: tx.hash,
+            timestamp: parseInt(tx.timeStamp) * 1000,
+            from: tx.from,
+            to: tx.to,
+            asset: "ETH",
+            amount: tx.value,
+            usdValue: 0,
+            fee: tx.gasUsed,
+            type: "transfer"
+          }));
+        } else if (walletAddress.startsWith("T")) {
+          const account = await wdk.getAccount('tron', 0);
+          const b = await account.getBalance();
           balance = b.toString();
+          const txs = await getTronTransactions(walletAddress);
+          history = filterLastYear(txs).map((tx: any) => ({
+            hash: tx.txID,
+            timestamp: tx.raw_data.timestamp,
+            from: tx.raw_data.contract[0].parameter.value.owner_address,
+            to: tx.raw_data.contract[0].parameter.value.to_address,
+            asset: "TRX",
+            amount: tx.raw_data.contract[0].parameter.value.amount,
+            usdValue: 0,
+            fee: tx.ret?.[0]?.fee || 0,
+            type: "transfer"
+          }));
         } else {
-          const acc = new WalletAccountReadOnlyEvm(wallet.address);
-          history = await acc.getTransactionHistory();
-          const b = await acc.getBalance();
+          const account = await wdk.getAccount('bitcoin', 0);
+          const b = await account.getBalance();
           balance = b.toString();
+          const txs = await getBitcoinTransactions(walletAddress);
+          history = filterLastYear(txs).map((tx: any) => ({
+            hash: tx.txid,
+            timestamp: (tx.status?.block_time || 0) * 1000,
+            from: "unknown",
+            to: walletAddress,
+            asset: "BTC",
+            amount: 0,
+            usdValue: 0,
+            fee: tx.fee || 0,
+            type: "transfer"
+          }));
         }
-        
-        // Mock price for USD conversion if not provided
-        balanceUsd = (parseFloat(balance) * 2500).toString(); // Assuming ETH-like price for demo
 
-        await db.update(wallets).set({ balance, balanceUsd }).where(eq(wallets.id, walletId));
-        
+        const balanceUsd = (parseFloat(balance) * 2500).toString();
+        await storage.updateWalletBalance(walletId, balance, balanceUsd);
+
         for (const tx of history) {
           await storage.createTransaction({
             walletId,
@@ -238,33 +273,31 @@ export async function registerRoutes(
             timestamp: new Date(tx.timestamp),
             fromAddress: tx.from,
             toAddress: tx.to,
-            token: tx.asset || "Native",
+            token: tx.asset,
             amount: tx.amount.toString(),
-            usdValue: tx.usdValue?.toString() || "0",
-            gasFeeUsd: tx.fee?.toString() || "0",
-            eventType: tx.type || "transfer"
+            usdValue: tx.usdValue.toString(),
+            gasFeeUsd: tx.fee.toString(),
+            eventType: tx.type
           });
-          count++;
         }
       } catch (e) {
-        console.warn("WDK/Trac Sync failed, using enhanced simulation", e);
+        console.warn("WDK Sync failed, using simulation", e);
         await storage.createTransaction({
           walletId,
-          txHash: `${wallet.chain.toLowerCase()}_${Math.random().toString(16).slice(2)}`,
+          txHash: `sim_${wallet.chain.toLowerCase()}_${Math.random().toString(16).slice(2)}`,
           chain: wallet.chain,
           timestamp: new Date(),
           fromAddress: wallet.address,
           toAddress: `ext_${Math.random().toString(16).slice(2)}`,
-          token: wallet.chain === 'Trac' ? 'TRAC' : 'USDT',
+          token: wallet.chain === 'Tron' ? 'TRX' : 'USDT',
           amount: (Math.random() * 100).toFixed(2),
           usdValue: (Math.random() * 100).toFixed(2),
           gasFeeUsd: "0.50",
           eventType: "transfer"
         });
-        count = 1;
       }
 
-      res.json({ success: true, count });
+      res.json({ success: true, count: history.length || 1 });
     } catch (err) {
       console.error("Sync error:", err);
       res.status(500).json({ message: "Failed to sync wallet" });
