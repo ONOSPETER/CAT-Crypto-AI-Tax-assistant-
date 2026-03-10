@@ -7,7 +7,7 @@ import { z } from "zod";
 export const wallets = pgTable("wallets", {
   id: serial("id").primaryKey(),
   address: text("address").notNull(),
-  chain: text("chain").notNull(), // 'Ethereum', 'Polygon', 'Solana', 'Bitcoin', 'Trac'
+  chain: text("chain").notNull(), // 'Ethereum', 'Polygon', 'Solana', 'Bitcoin', 'Trac', 'Tron'
   label: text("label"),
   userId: text("user_id").notNull(),
   balance: text("balance").default("0"),

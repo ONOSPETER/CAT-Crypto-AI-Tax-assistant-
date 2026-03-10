@@ -3,22 +3,39 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import OpenAI from "openai";
-import { WalletAccountReadOnlyEvm } from "@tetherto/wdk-wallet-evm";
-import { WalletAccountReadOnlyBtc } from "@tetherto/wdk-wallet-btc";
-import { WalletAccountReadOnlySolana } from "@tetherto/wdk-wallet-solana";
-import { stringify } from "csv-stringify/sync";
+import WDK from '@tetherto/wdk';
+import WalletManagerEvm from '@tetherto/wdk-wallet-evm';
+import WalletManagerTron from '@tetherto/wdk-wallet-tron';
+import WalletManagerBtc from '@tetherto/wdk-wallet-btc';
+import axios from 'axios';
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
 
-import session from "express-session";
-import connectPg from "connect-pg-simple";
-import { pool } from "./db";
+async function getEthereumTransactions(address: string) {
+  const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc`;
+  const res = await axios.get(url);
+  return res.data.result || [];
+}
 
-const PostgresStore = connectPg(session);
+async function getBitcoinTransactions(address: string) {
+  const url = `https://blockstream.info/api/address/${address}/txs`;
+  const res = await axios.get(url);
+  return res.data || [];
+}
+
+async function getTronTransactions(address: string) {
+  const url = `https://api.trongrid.io/v1/accounts/${address}/transactions`;
+  const res = await axios.get(url);
+  return res.data.data || [];
+}
+
+function filterLastYear(txs: any[]) {
+  const now = Date.now();
+  return txs.filter(tx => {
+    const ts = (tx.timeStamp || tx.block_timestamp || tx.status?.block_time || 0) * 1000;
+    return now - ts <= ONE_YEAR;
+  });
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -56,46 +73,73 @@ export async function registerRoutes(
       (async () => {
         try {
           const walletId = wallet.id;
+          const walletAddress = wallet.address;
           const chainType = wallet.chain.toLowerCase();
-          let history: any[] = [];
-          let balance = "0";
-          let balanceUsd = "0";
+          
+          const seedPhrase = WDK.getRandomSeedPhrase();
+          const wdk = new WDK(seedPhrase)
+            .registerWallet('ethereum', WalletManagerEvm, { provider: 'https://eth.drpc.org' })
+            .registerWallet('tron', WalletManagerTron, { provider: 'https://api.trongrid.io' })
+            .registerWallet('bitcoin', WalletManagerBtc, {
+              network: 'mainnet',
+              host: 'electrum.blockstream.info',
+              port: 50001
+            });
 
-          if (chainType === 'trac') {
-            const response = await fetch(`https://explorer.trac.network/api/v1/address/${wallet.address}/transactions`);
-            if (response.ok) {
-              const data: any = await response.json();
-              balance = data.balance || "0";
-              history = data.transactions.map((tx: any) => ({
-                hash: tx.hash,
-                timestamp: tx.timestamp * 1000,
-                from: tx.from,
-                to: tx.to,
-                asset: "TRAC",
-                amount: tx.amount,
-                usdValue: 0,
-                fee: tx.fee,
-                type: "transfer"
-              }));
-            }
-          } else if (chainType.includes('solana')) {
-            const acc = new WalletAccountReadOnlySolana(wallet.address);
-            history = await acc.getTransactionHistory();
-            const b = await acc.getBalance();
+          let balance = "0";
+          let history: any[] = [];
+
+          if (walletAddress.startsWith("0x")) {
+            const account = await wdk.getAccount('ethereum', 0);
+            const b = await account.getBalance();
             balance = b.toString();
-          } else if (chainType.includes('bitcoin')) {
-            const acc = new WalletAccountReadOnlyBtc(wallet.address);
-            history = await acc.getTransactionHistory();
-            const b = await acc.getBalance();
+            const txs = await getEthereumTransactions(walletAddress);
+            history = filterLastYear(txs).map((tx: any) => ({
+              hash: tx.hash,
+              timestamp: tx.timeStamp * 1000,
+              from: tx.from,
+              to: tx.to,
+              asset: "ETH",
+              amount: tx.value,
+              usdValue: 0,
+              fee: tx.gasUsed,
+              type: "transfer"
+            }));
+          } else if (walletAddress.startsWith("T")) {
+            const account = await wdk.getAccount('tron', 0);
+            const b = await account.getBalance();
             balance = b.toString();
+            const txs = await getTronTransactions(walletAddress);
+            history = filterLastYear(txs).map((tx: any) => ({
+              hash: tx.txID,
+              timestamp: tx.raw_data.timestamp,
+              from: tx.raw_data.contract[0].parameter.value.owner_address,
+              to: tx.raw_data.contract[0].parameter.value.to_address,
+              asset: "TRX",
+              amount: tx.raw_data.contract[0].parameter.value.amount,
+              usdValue: 0,
+              fee: tx.ret?.[0]?.fee || 0,
+              type: "transfer"
+            }));
           } else {
-            const acc = new WalletAccountReadOnlyEvm(wallet.address);
-            history = await acc.getTransactionHistory();
-            const b = await acc.getBalance();
+            const account = await wdk.getAccount('bitcoin', 0);
+            const b = await account.getBalance();
             balance = b.toString();
+            const txs = await getBitcoinTransactions(walletAddress);
+            history = filterLastYear(txs).map((tx: any) => ({
+              hash: tx.txid,
+              timestamp: (tx.status?.block_time || 0) * 1000,
+              from: "unknown",
+              to: walletAddress,
+              asset: "BTC",
+              amount: 0, // Simplified
+              usdValue: 0,
+              fee: tx.fee || 0,
+              type: "transfer"
+            }));
           }
           
-          balanceUsd = (parseFloat(balance) * 2500).toString();
+          const balanceUsd = (parseFloat(balance) * 2500).toString();
           await storage.updateWalletBalance(walletId, balance, balanceUsd);
           
           for (const tx of history) {
@@ -106,11 +150,11 @@ export async function registerRoutes(
               timestamp: new Date(tx.timestamp),
               fromAddress: tx.from,
               toAddress: tx.to,
-              token: tx.asset || "Native",
+              token: tx.asset,
               amount: tx.amount.toString(),
-              usdValue: tx.usdValue?.toString() || "0",
-              gasFeeUsd: tx.fee?.toString() || "0",
-              eventType: tx.type || "transfer"
+              usdValue: tx.usdValue.toString(),
+              gasFeeUsd: tx.fee.toString(),
+              eventType: tx.type
             });
           }
         } catch (e) {

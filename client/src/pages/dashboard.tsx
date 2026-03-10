@@ -185,6 +185,7 @@ export default function Dashboard() {
                       <SelectItem value="Solana">Solana</SelectItem>
                       <SelectItem value="Bitcoin">Bitcoin</SelectItem>
                       <SelectItem value="Trac">Trac Network</SelectItem>
+                      <SelectItem value="Tron">Tron</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
