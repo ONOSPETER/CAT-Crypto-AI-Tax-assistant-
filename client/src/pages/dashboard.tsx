@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useWallets, useCreateWallet, useSyncWallet, useDeleteWallet, usePageLoadSync } from "@/hooks/use-wallets";
+import { useWallets, useCreateWallet, useSyncWallet, useDeleteWallet, usePageLoadSync, useSyncAllWallets } from "@/hooks/use-wallets";
 import { useTransactions } from "@/hooks/use-transactions";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,7 @@ export default function Dashboard() {
   const createWallet = useCreateWallet();
   const syncWallet = useSyncWallet();
   const deleteWallet = useDeleteWallet();
+  const syncAllWallets = useSyncAllWallets();
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isIntercomOpen, setIsIntercomOpen] = useState(false);
@@ -126,6 +127,15 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-2">Manage your connected wallets and track taxable events.</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={() => syncAllWallets.mutate()}
+            disabled={syncAllWallets.isPending || wallets.length === 0}
+            className="bg-accent/80 text-accent-foreground hover:bg-accent"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncAllWallets.isPending ? 'animate-spin' : ''}`} />
+            {syncAllWallets.isPending ? "Syncing..." : "Sync All Wallets"}
+          </Button>
+
           <Dialog open={isIntercomOpen} onOpenChange={setIsIntercomOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-white/10 bg-background/50">

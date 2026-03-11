@@ -298,25 +298,33 @@ export async function registerRoutes(
   });
 
   // ── POST /api/wallets/sync-all ─────────────────────────────────────────────
-  // Triggered on page load. Silently syncs all wallets in the background.
-  // Returns { synced, total } count without blocking the page.
+  // Syncs all wallets for a user. Can be triggered on page load or manually.
+  // Returns transaction counts and total balance across all wallets.
   app.post("/api/wallets/sync-all", async (req, res) => {
     const userId = getUserId(req);
     const walletList = await storage.getWallets(userId);
 
-    res.json({ synced: 0, total: walletList.length });
+    // Perform all syncs in parallel and collect results
+    const results = await Promise.allSettled(
+      walletList.map(async (wallet) => {
+        const { balance, history } = await syncWalletData(wallet.address, wallet.chain);
+        const count = await persistSyncResult(wallet.id, wallet.chain, balance, history);
+        const assetKey = wallet.chain === "Tron" ? "TRX" : wallet.chain === "Bitcoin" ? "BTC" : "ETH";
+        const balanceUsd = (parseFloat(balance) * (COIN_PRICES[assetKey] || 1)).toString();
+        return { walletId: wallet.id, count, balance, balanceUsd };
+      })
+    );
 
-    // Fire off all syncs in parallel, don't await them
-    for (const wallet of walletList) {
-      (async () => {
-        try {
-          const { balance, history } = await syncWalletData(wallet.address, wallet.chain);
-          await persistSyncResult(wallet.id, wallet.chain, balance, history);
-        } catch (e) {
-          console.warn(`[page-load-sync] Failed for wallet ${wallet.id}:`, e);
-        }
-      })();
-    }
+    const successful = results.filter(r => r.status === 'fulfilled');
+    const totalTxCount = successful.reduce((sum, r) => sum + (r.value?.count || 0), 0);
+    const totalBalance = successful.reduce((sum, r) => sum + parseFloat(r.value?.balanceUsd || "0"), 0);
+
+    res.json({
+      synced: successful.length,
+      total: walletList.length,
+      transactionCount: totalTxCount,
+      totalBalance: totalBalance.toFixed(2),
+    });
   });
 
   // ── POST /api/wallets/:id/sync ─────────────────────────────────────────────

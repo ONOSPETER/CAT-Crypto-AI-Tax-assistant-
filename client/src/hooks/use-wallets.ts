@@ -184,3 +184,39 @@ export function useDeleteWallet() {
     },
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useSyncAllWallets
+// Syncs all wallets at once, showing progress and final totals.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useSyncAllWallets() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/wallets/sync-all", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to sync all wallets");
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.wallets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      toast({
+        title: "Sync Complete",
+        description: `Synced ${data.synced}/${data.total} wallets • ${data.transactionCount} transactions • Total: $${data.totalBalance}`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
