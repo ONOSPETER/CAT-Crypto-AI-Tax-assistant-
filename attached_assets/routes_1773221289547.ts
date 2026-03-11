@@ -30,35 +30,21 @@ const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function getEthereumTransactions(address: string) {
-  try {
-    const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc`;
-    const res = await axios.get(url);
-    const result = res.data.result;
-    return Array.isArray(result) ? result : [];
-  } catch {
-    return [];
-  }
+  const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc`;
+  const res = await axios.get(url);
+  return res.data.result || [];
 }
 
 async function getBitcoinTransactions(address: string) {
-  try {
-    const url = `https://blockstream.info/api/address/${address}/txs`;
-    const res = await axios.get(url);
-    return Array.isArray(res.data) ? res.data : [];
-  } catch {
-    return [];
-  }
+  const url = `https://blockstream.info/api/address/${address}/txs`;
+  const res = await axios.get(url);
+  return res.data || [];
 }
 
 async function getTronTransactions(address: string) {
-  try {
-    const url = `https://api.trongrid.io/v1/accounts/${address}/transactions`;
-    const res = await axios.get(url);
-    const data = res.data.data;
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  const url = `https://api.trongrid.io/v1/accounts/${address}/transactions`;
+  const res = await axios.get(url);
+  return res.data.data || [];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -297,28 +283,6 @@ export async function registerRoutes(
     }
   });
 
-  // ── POST /api/wallets/sync-all ─────────────────────────────────────────────
-  // Triggered on page load. Silently syncs all wallets in the background.
-  // Returns { synced, total } count without blocking the page.
-  app.post("/api/wallets/sync-all", async (req, res) => {
-    const userId = getUserId(req);
-    const walletList = await storage.getWallets(userId);
-
-    res.json({ synced: 0, total: walletList.length });
-
-    // Fire off all syncs in parallel, don't await them
-    for (const wallet of walletList) {
-      (async () => {
-        try {
-          const { balance, history } = await syncWalletData(wallet.address, wallet.chain);
-          await persistSyncResult(wallet.id, wallet.chain, balance, history);
-        } catch (e) {
-          console.warn(`[page-load-sync] Failed for wallet ${wallet.id}:`, e);
-        }
-      })();
-    }
-  });
-
   // ── POST /api/wallets/:id/sync ─────────────────────────────────────────────
   // Triggered when the user presses the refresh button on a wallet card.
   // Syncs one wallet and returns the count of transactions found.
@@ -330,17 +294,55 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Wallet not found" });
       }
 
-      try {
-        const { balance, history } = await syncWalletData(wallet.address, wallet.chain);
-        const count = await persistSyncResult(wallet.id, wallet.chain, balance, history);
-        res.json({ success: true, count });
-      } catch (e) {
-        console.warn("[sync] WDK/API Sync failed:", e);
-        res.status(500).json({ message: "Sync failed — check server logs for details." });
-      }
+      const { balance, history } = await syncWalletData(wallet.address, wallet.chain);
+      const count = await persistSyncResult(walletId, wallet.chain, balance, history);
+
+      console.log(`[sync] Manual refresh ${wallet.address}: ${count} txs processed`);
+      res.json({ success: true, count });
     } catch (err) {
-      console.error("[sync] Route error:", err);
+      console.error("[sync] Manual sync error:", err);
       res.status(500).json({ message: "Failed to sync wallet" });
+    }
+  });
+
+  // ── POST /api/wallets/sync-all ─────────────────────────────────────────────
+  // Triggered on every page load / browser reload from the frontend.
+  // Silently re-syncs all wallets for this session in parallel.
+  // Uses upsertTransaction so no duplicate rows are ever created.
+  app.post("/api/wallets/sync-all", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const userWallets = await storage.getWallets(userId);
+
+      if (userWallets.length === 0) {
+        return res.json({ success: true, synced: 0, total: 0 });
+      }
+
+      // Run all wallet syncs concurrently
+      const results = await Promise.allSettled(
+        userWallets.map(async (wallet) => {
+          const { balance, history } = await syncWalletData(wallet.address, wallet.chain);
+          const count = await persistSyncResult(wallet.id, wallet.chain, balance, history);
+          return { walletId: wallet.id, address: wallet.address, count };
+        })
+      );
+
+      const succeeded = results.filter(r => r.status === "fulfilled").length;
+      const failed = results.filter(r => r.status === "rejected").length;
+
+      results.forEach((r, i) => {
+        if (r.status === "rejected") {
+          console.error(`[sync-all] Failed for ${userWallets[i].address}:`, (r as PromiseRejectedResult).reason);
+        } else {
+          const v = (r as PromiseFulfilledResult<any>).value;
+          console.log(`[sync-all] ${v.address}: ${v.count} txs`);
+        }
+      });
+
+      res.json({ success: true, synced: succeeded, failed, total: userWallets.length });
+    } catch (err) {
+      console.error("[sync-all] Error:", err);
+      res.status(500).json({ message: "Sync all failed" });
     }
   });
 
@@ -363,10 +365,9 @@ export async function registerRoutes(
     const userId = getUserId(req);
     await storage.createMessage(content, 'user', userId);
 
-    // Fetch the user's transactions so the AI has context about their portfolio
     const userTxs = await storage.getTransactions(userId);
     const txSummary = userTxs.length > 0
-      ? `The user has ${userTxs.length} transactions on record. Recent tokens: ${[...new Set(userTxs.map(t => t.token))].slice(0, 5).join(", ")}.`
+      ? `The user has ${userTxs.length} transactions on record. Tokens: ${[...new Set(userTxs.map(t => t.token))].slice(0, 5).join(", ")}.`
       : "The user has no transactions synced yet.";
 
     const response = await openai.chat.completions.create({
@@ -374,8 +375,8 @@ export async function registerRoutes(
       messages: [
         {
           role: "system",
-          content: `You are CAT, an AI-powered crypto tax assistant communicating via Trac Network Intercom. 
-Be concise, professional, and helpful. You have access to the user's transaction context below.
+          content: `You are CAT, an AI-powered crypto tax assistant communicating via Trac Network Intercom.
+Be concise, professional, and helpful. User transaction context:
 ${txSummary}`,
         },
         { role: "user", content },
@@ -408,7 +409,7 @@ ${txSummary}`,
     res.json(report);
   });
 
-  // ── GET /api/reports/:id/download ──────────────────────────────────────────
+  // ── GET /api/reports/:id/download ─────────────────────────────────────────
   app.get("/api/reports/:id/download", async (req, res) => {
     const report = await storage.getReport(Number(req.params.id));
     if (!report || !report.reportJson) {
@@ -420,7 +421,6 @@ ${txSummary}`,
 
     try {
       const data = JSON.parse(report.reportJson);
-      // Simplify for CSV
       const csv = stringify(Array.isArray(data.transactions) ? data.transactions : [data]);
       res.send(csv);
     } catch (e) {
@@ -428,7 +428,7 @@ ${txSummary}`,
     }
   });
 
-  // ── POST /api/reports/generate ─────────────────────────────────────────────
+  // ── POST /api/reports ──────────────────────────────────────────────────────
   app.post(api.reports.generate.path, async (req, res) => {
     try {
       const input = api.reports.generate.input.parse(req.body);
