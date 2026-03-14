@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/lucide-react/lucide/main/icons/cat.svg" width="100" height="100" />
+  <img src= "./logo.png" width="100" height="100" />
   <h1>CAT (Crypto AI Tax Assistant)</h1>
   <p><strong>trac1qxd80ulwx4lhauqrpgn779php3g6mq3j7rwddg6s88km0qz2hm0stf9jkw</strong></p>
 </div>
@@ -10,7 +10,7 @@
 <p>
   CAT is an autonomous, AI-powered tax assistant designed for the multi-chain crypto ecosystem. It solves the complexity of cross-chain tax reporting by automatically aggregating transaction data, identifying taxable events, and generating country-specific, ready-to-file tax documents.
 </p>
-<a href= "https://crypto-tax-assistant--sarahken001x.replit.app/">Live demo</a>
+
 <h2>Key Features</h2>
 <ul>
   <li><strong>Multi-Chain Sync:</strong> Connect Ethereum, Polygon, Solana, Bitcoin, and Trac Network wallets.</li>
@@ -33,9 +33,17 @@
 </p>
 
 <h2>Demo</h2>
-<video src="./demo.mp4" width="100%" controls>
-  Your browser does not support the video tag.
-</video>
+<img src="./demo1.jpeg" width= 100% />
+<img src="./demo2.jpeg" width= 100% />
+<img src="./demo3.jpeg" width= 100% />
+<p align="center">
+  <a href="https://youtube.com/shorts/TWKW56Y3N_Y?si=tr6yPSAVE_UD3hpd">
+    <img src="https://img.youtube.com/vi/DfcRJezFEuk/maxresdefault.jpg" width="100%" />
+  </a>
+</p>
+<p align="center">
+  ▶️ Click to watch the live demo
+</p>
 
 <h2>Installation & Setup</h2>
 <pre>
