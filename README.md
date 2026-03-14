@@ -34,8 +34,8 @@
 
 <h2>Demo</h2>
 <img src="./demo1.jpeg" width= 100% />
-<img src="./demo2.jpeg" width= 100% />
-<img src="./demo3.jpeg" width= 100% />
+<img src="./demo2.jpg" width= 100% />
+<img src="./demo3.jpg" width= 100% />
 <p align="center">
   <a href="https://youtube.com/shorts/TWKW56Y3N_Y?si=tr6yPSAVE_UD3hpd">
     <img src="https://img.youtube.com/vi/DfcRJezFEuk/maxresdefault.jpg" width="100%" />
