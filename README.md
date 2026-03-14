@@ -26,6 +26,7 @@
 <p>
   CAT leverages <code>@tetherto/wdk</code> to interact with multiple blockchains without requiring private keys. By using <code>WalletAccountReadOnly</code> classes, the app securely fetches transaction histories across disparate networks (EVM, BTC, SOL) and normalizes the data for tax calculation.
 </p>
+<img src="./code.jpg" width= 100% />
 
 <h3>Intercom Module</h3>
 <p>
